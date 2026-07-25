@@ -26,7 +26,7 @@ import time
 import requests
 from playwright.sync_api import sync_playwright
 
-TICKET_URL = "https://resell.seetickets.com/fete-de-lhumanite-2026/"
+TICKET_URL = "https://resell.seetickets.com/fete-de-lhumanite-2026/event/2915/fete-de-l-humanite-2026-camping"
 
 # Texte exact affiché quand aucun billet n'est en revente
 NO_TICKET_TEXT = "aucun billet disponible"
@@ -107,13 +107,26 @@ def run_once() -> None:
     save_state(new_state)
 
 
+def run_test() -> None:
+    """Envoie une notification de test pour vérifier que le webhook Discord fonctionne."""
+    print("[i] Mode test : envoi d'une notification Discord...")
+    send_discord(
+        "✅ **Test réussi !** Le bot de surveillance Fête de l'Huma fonctionne.\n"
+        "Tu recevras un message ici dès qu'un billet camping apparaît en revente."
+    )
+    print("[i] Si tu as reçu le message sur Discord, tout est bon !")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--loop", action="store_true", help="Tourne en continu")
     parser.add_argument("--interval", type=int, default=300, help="Intervalle en secondes (mode --loop)")
+    parser.add_argument("--test", action="store_true", help="Envoie une notif de test et quitte")
     args = parser.parse_args()
 
-    if args.loop:
+    if args.test:
+        run_test()
+    elif args.loop:
         print(f"Surveillance en continu, toutes les {args.interval}s. Ctrl+C pour arrêter.")
         while True:
             run_once()
