@@ -5,7 +5,12 @@ on:
     # Toutes les 15 minutes (le minimum fiable sur GitHub Actions ~5min,
     # mais en pratique GitHub ne garantit pas la précision à la minute près)
     - cron: "*/30 * * * *"
-  workflow_dispatch: {}  # permet de lancer manuellement depuis l'onglet Actions
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Envoyer une notification de test ?"
+        type: boolean
+        default: false
 
 jobs:
   check:
@@ -32,7 +37,7 @@ jobs:
       - name: Check tickets
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python watch_tickets.py
+        run: python watch_tickets.py ${{ github.event.inputs.test == 'true' && '--test' || '' }}
 
       - name: Save state
         uses: actions/cache@v4
