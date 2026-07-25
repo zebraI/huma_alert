@@ -4,7 +4,7 @@ on:
   schedule:
     # Toutes les 15 minutes (le minimum fiable sur GitHub Actions ~5min,
     # mais en pratique GitHub ne garantit pas la précision à la minute près)
-    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}  # permet de lancer manuellement depuis l'onglet Actions
 
 jobs:
