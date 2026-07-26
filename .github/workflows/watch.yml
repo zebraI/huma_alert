@@ -1,10 +1,8 @@
 name: Watch Huma camping tickets
 
 on:
-  schedule:
-    # Toutes les 15 minutes (le minimum fiable sur GitHub Actions ~5min,
-    # mais en pratique GitHub ne garantit pas la précision à la minute près)
-    - cron: "*/30 * * * *"
+  repository_dispatch:
+    types: [check-tickets]
   workflow_dispatch:
     inputs:
       test:
