@@ -28,7 +28,9 @@ jobs:
       - name: Restore last state
         uses: actions/cache@v5
         with:
-          path: last_state.txt
+          path: |
+            last_state.txt
+            error_count.txt
           key: huma-state-${{ github.run_id }}
           restore-keys: huma-state-
 
@@ -40,5 +42,7 @@ jobs:
       - name: Save state
         uses: actions/cache@v5
         with:
-          path: last_state.txt
+          path: |
+            last_state.txt
+            error_count.txt
           key: huma-state-${{ github.run_id }}
