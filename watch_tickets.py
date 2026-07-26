@@ -83,12 +83,44 @@ def save_state(state: str) -> None:
         f.write(state)
 
 
+ERROR_FILE = os.path.join(os.path.dirname(__file__), "error_count.txt")
+
+
+def load_error_count() -> int:
+    if os.path.exists(ERROR_FILE):
+        return int(open(ERROR_FILE).read().strip())
+    return 0
+
+
+def save_error_count(count: int) -> None:
+    with open(ERROR_FILE, "w") as f:
+        f.write(str(count))
+
+
 def run_once() -> None:
     try:
         available, sample = check_availability()
     except Exception as e:
-        print(f"[!] Erreur pendant la vérification: {e}")
+        error_count = load_error_count() + 1
+        save_error_count(error_count)
+        print(f"[!] Erreur pendant la vérification ({error_count} consécutive(s)): {e}")
+
+        # Alerte au bout de 3 erreurs d'affilée, puis toutes les 10
+        if error_count == 3:
+            send_discord(
+                "⚠️ **Le bot a planté 3 fois d'affilée.**\n"
+                f"Erreur : `{e}`\n"
+                "Le site bloque peut-être les requêtes. Vérifie dans les logs GitHub Actions."
+            )
+        elif error_count % 10 == 0:
+            send_discord(
+                f"🔴 **Le bot est en erreur depuis {error_count} checks.**\n"
+                "Il est probablement bloqué par le site."
+            )
         return
+
+    # Remise à zéro du compteur d'erreurs si le check passe
+    save_error_count(0)
 
     new_state = "available" if available else "sold_out"
     last_state = load_last_state()
