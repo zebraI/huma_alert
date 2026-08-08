@@ -37,6 +37,7 @@ jobs:
       - name: Check tickets
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python watch_tickets.py ${{ github.event.inputs.test == 'true' && '--test' || '' }}
 
       - name: Save state
