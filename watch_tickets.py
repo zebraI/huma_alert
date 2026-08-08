@@ -79,12 +79,13 @@ def send_ntfy(message: str, title: str = "Huma Ticket Bot", priority: int = 5) -
         return
 
     resp = requests.post(
-        f"https://ntfy.sh/{topic}",
-        data=message.encode("utf-8"),
-        headers={
-            "Title": title,
-            "Priority": str(priority),  # 5 = urgente (perce le silencieux)
-            "Tags": "tickets,camping",
+        "https://ntfy.sh",
+        json={
+            "topic": topic,
+            "title": title,
+            "message": message,
+            "priority": priority,
+            "tags": ["tickets", "camping"],
         },
         timeout=15,
     )
