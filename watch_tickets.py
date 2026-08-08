@@ -3,11 +3,12 @@
 Bot de surveillance des billets de camping - Fête de l'Huma 2026.
 
 Vérifie périodiquement la page officielle de billetterie et envoie une
-notification Discord dès qu'un billet "Camping" redevient disponible
+notification Discord + ntfy dès qu'un billet "Camping" redevient disponible
 (revente officielle SeeTickets).
 
 Variables d'environnement requises :
     DISCORD_WEBHOOK_URL   URL du webhook Discord (Paramètres du salon > Intégrations > Webhooks)
+    NTFY_TOPIC            Nom du topic ntfy (ex: huma-camping-xyz123)
 
 Utilisation locale :
     pip install playwright requests
@@ -59,8 +60,7 @@ def check_availability() -> tuple[bool, str]:
 def send_discord(message: str) -> None:
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
-        print("[!] DISCORD_WEBHOOK_URL non défini, notification impossible.")
-        print(message)
+        print("[!] DISCORD_WEBHOOK_URL non défini, notification Discord ignorée.")
         return
 
     payload = {
@@ -70,6 +70,32 @@ def send_discord(message: str) -> None:
     resp = requests.post(webhook_url, json=payload, timeout=15)
     if resp.status_code not in (200, 204):
         print(f"[!] Échec envoi Discord: {resp.status_code} {resp.text}")
+
+
+def send_ntfy(message: str, title: str = "Huma Ticket Bot", priority: int = 5) -> None:
+    topic = os.environ.get("NTFY_TOPIC")
+    if not topic:
+        print("[!] NTFY_TOPIC non défini, notification ntfy ignorée.")
+        return
+
+    resp = requests.post(
+        f"https://ntfy.sh/{topic}",
+        data=message.encode("utf-8"),
+        headers={
+            "Title": title,
+            "Priority": str(priority),  # 5 = urgente (perce le silencieux)
+            "Tags": "tickets,camping",
+        },
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        print(f"[!] Échec envoi ntfy: {resp.status_code} {resp.text}")
+
+
+def notify(message: str, title: str = "Huma Ticket Bot", priority: int = 5) -> None:
+    """Envoie la notification sur tous les canaux configurés."""
+    send_discord(message)
+    send_ntfy(message, title=title, priority=priority)
 
 
 def load_last_state() -> str:
@@ -107,15 +133,19 @@ def run_once() -> None:
 
         # Alerte au bout de 3 erreurs d'affilée, puis toutes les 10
         if error_count == 3:
-            send_discord(
-                "⚠️ **Le bot a planté 3 fois d'affilée.**\n"
-                f"Erreur : `{e}`\n"
-                "Le site bloque peut-être les requêtes. Vérifie dans les logs GitHub Actions."
+            notify(
+                "Le bot a planté 3 fois d'affilée.\n"
+                f"Erreur : {e}\n"
+                "Le site bloque peut-être les requêtes. Vérifie dans les logs GitHub Actions.",
+                title="⚠️ Bot en erreur",
+                priority=3,
             )
         elif error_count % 10 == 0:
-            send_discord(
-                f"🔴 **Le bot est en erreur depuis {error_count} checks.**\n"
-                "Il est probablement bloqué par le site."
+            notify(
+                f"Le bot est en erreur depuis {error_count} checks.\n"
+                "Il est probablement bloqué par le site.",
+                title="🔴 Bot bloqué",
+                priority=3,
             )
         return
 
@@ -131,22 +161,26 @@ def run_once() -> None:
         # On notifie à chaque check tant que c'est dispo, pour ne rater aucune fenêtre,
         # mais on peut réduire à "seulement si ça vient de changer" en décommentant la condition
         # if last_state != "available":
-        send_discord(
-            "🎪 **Billet(s) CAMPING disponible(s) pour la Fête de l'Huma !**\n"
-            f"{TICKET_URL}\nFonce, le stock peut repartir vite."
+        notify(
+            f"Billet(s) CAMPING disponible(s) pour la Fête de l'Huma !\n"
+            f"{TICKET_URL}\nFonce, le stock peut repartir vite.",
+            title="🎪 BILLET CAMPING DISPO !",
+            priority=5,
         )
 
     save_state(new_state)
 
 
 def run_test() -> None:
-    """Envoie une notification de test pour vérifier que le webhook Discord fonctionne."""
-    print("[i] Mode test : envoi d'une notification Discord...")
-    send_discord(
-        "✅ **Test réussi !** Le bot de surveillance Fête de l'Huma fonctionne.\n"
-        "Tu recevras un message ici dès qu'un billet camping apparaît en revente."
+    """Envoie une notification de test sur tous les canaux."""
+    print("[i] Mode test : envoi des notifications...")
+    notify(
+        "Test réussi ! Le bot de surveillance Fête de l'Huma fonctionne.\n"
+        "Tu recevras un message ici dès qu'un billet camping apparaît en revente.",
+        title="✅ Test réussi",
+        priority=5,
     )
-    print("[i] Si tu as reçu le message sur Discord, tout est bon !")
+    print("[i] Vérifie Discord ET ntfy !")
 
 
 def main():
