@@ -1,0 +1,17 @@
+name: Debug network
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install playwright requests
+          playwright install --with-deps chromium
+      - run: python debug_network.py
