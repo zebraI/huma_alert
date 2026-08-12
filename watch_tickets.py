@@ -1,83 +1,80 @@
 #!/usr/bin/env python3
 """
 Bot de surveillance des billets de camping - Fête de l'Huma 2026.
-
-Vérifie périodiquement la page officielle de billetterie et envoie une
-notification Discord + ntfy dès qu'un billet "Camping" redevient disponible
-(revente officielle SeeTickets).
+Version légère : appel API direct, sans navigateur.
 
 Variables d'environnement requises :
-    DISCORD_WEBHOOK_URL   URL du webhook Discord (Paramètres du salon > Intégrations > Webhooks)
-    NTFY_TOPIC            Nom du topic ntfy (ex: huma-camping-xyz123)
+    DISCORD_WEBHOOK_URL   URL du webhook Discord
+    NTFY_TOPIC            Nom du topic ntfy
 
-Utilisation locale :
-    pip install playwright requests
-    playwright install chromium
-    python watch_tickets.py
-
-En boucle continue (mode local) :
-    python watch_tickets.py --loop --interval 300
+Utilisation :
+    python watch_tickets.py              # une seule vérification
+    python watch_tickets.py --loop       # en continu (toutes les 30s par défaut)
+    python watch_tickets.py --test       # notification de test
 """
 
 import argparse
 import os
-import sys
 import time
 
 import requests
-from playwright.sync_api import sync_playwright
 
-TICKET_URL = "https://resell.seetickets.com/fete-de-lhumanite-2026/event/2915/fete-de-l-humanite-2026-camping"
+API_URL = (
+    "https://resell.seetickets.com/api/categories"
+    "?event=2915&isActive=1&activeEvent=true"
+    "&order[rank]=asc&order[startDate]=asc&order[nbTicket]=desc"
+    "&page=1&itemsPerPage=9"
+)
 
-# Texte exact affiché quand aucun billet n'est en revente
-NO_TICKET_TEXT = "aucun billet disponible"
+TICKET_PAGE = "https://resell.seetickets.com/fete-de-lhumanite-2026/event/2915/fete-de-l-humanite-2026-camping"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/ld+json, application/json",
+    "Accept-Language": "fr-FR,fr;q=0.9",
+    "Referer": TICKET_PAGE,
+}
 
 STATE_FILE = os.path.join(os.path.dirname(__file__), "last_state.txt")
+ERROR_FILE = os.path.join(os.path.dirname(__file__), "error_count.txt")
 
 
-def check_availability() -> tuple[bool, str]:
-    """Charge la page de revente avec un vrai navigateur headless."""
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            ),
-            locale="fr-FR",
-        )
-        page = context.new_page()
-        page.goto(TICKET_URL, wait_until="networkidle", timeout=30000)
-        # Laisse le temps aux scripts de la billetterie de charger le stock
-        page.wait_for_timeout(3000)
-        body_text = page.inner_text("body").lower()
-        browser.close()
+def check_availability() -> tuple[bool, int]:
+    """Appelle l'API et retourne (dispo, nb_tickets)."""
+    resp = requests.get(API_URL, headers=HEADERS, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
 
-    available = NO_TICKET_TEXT not in body_text
-    return available, body_text[:500]  # extrait pour debug
+    members = data.get("hydra:member", [])
+    if not members:
+        return False, 0
+
+    nb_tickets = members[0].get("nbTicket", 0)
+    return nb_tickets > 0, nb_tickets
 
 
 def send_discord(message: str) -> None:
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
-        print("[!] DISCORD_WEBHOOK_URL non défini, notification Discord ignorée.")
+        print("[!] DISCORD_WEBHOOK_URL non défini.")
         return
-
-    payload = {
-        "content": message,
-        "username": "Huma Ticket Bot 🎪",
-    }
-    resp = requests.post(webhook_url, json=payload, timeout=15)
+    resp = requests.post(
+        webhook_url,
+        json={"content": message, "username": "Huma Ticket Bot"},
+        timeout=15,
+    )
     if resp.status_code not in (200, 204):
-        print(f"[!] Échec envoi Discord: {resp.status_code} {resp.text}")
+        print(f"[!] Discord: {resp.status_code} {resp.text}")
 
 
 def send_ntfy(message: str, title: str = "Huma Ticket Bot", priority: int = 5) -> None:
     topic = os.environ.get("NTFY_TOPIC")
     if not topic:
-        print("[!] NTFY_TOPIC non défini, notification ntfy ignorée.")
+        print("[!] NTFY_TOPIC non défini.")
         return
-
     resp = requests.post(
         "https://ntfy.sh",
         json={
@@ -90,34 +87,30 @@ def send_ntfy(message: str, title: str = "Huma Ticket Bot", priority: int = 5) -
         timeout=15,
     )
     if resp.status_code != 200:
-        print(f"[!] Échec envoi ntfy: {resp.status_code} {resp.text}")
+        print(f"[!] ntfy: {resp.status_code} {resp.text}")
 
 
 def notify(message: str, title: str = "Huma Ticket Bot", priority: int = 5) -> None:
-    """Envoie la notification sur tous les canaux configurés."""
     send_discord(message)
     send_ntfy(message, title=title, priority=priority)
 
 
-def load_last_state() -> str:
+def load_last_state() -> int:
     if os.path.exists(STATE_FILE):
-        return open(STATE_FILE).read().strip()
-    return "unknown"
+        try:
+            return int(open(STATE_FILE).read().strip())
+        except ValueError:
+            return 0
+    return 0
 
-
-def save_state(state: str) -> None:
+def save_state(nb_tickets: int) -> None:
     with open(STATE_FILE, "w") as f:
-        f.write(state)
-
-
-ERROR_FILE = os.path.join(os.path.dirname(__file__), "error_count.txt")
-
+        f.write(str(nb_tickets))
 
 def load_error_count() -> int:
     if os.path.exists(ERROR_FILE):
         return int(open(ERROR_FILE).read().strip())
     return 0
-
 
 def save_error_count(count: int) -> None:
     with open(ERROR_FILE, "w") as f:
@@ -126,75 +119,58 @@ def save_error_count(count: int) -> None:
 
 def run_once() -> None:
     try:
-        available, sample = check_availability()
+        available, nb_tickets = check_availability()
     except Exception as e:
         error_count = load_error_count() + 1
         save_error_count(error_count)
-        print(f"[!] Erreur pendant la vérification ({error_count} consécutive(s)): {e}")
-
-        # Alerte au bout de 3 erreurs d'affilée, puis toutes les 10
+        print(f"[!] Erreur ({error_count} consecutives): {e}")
         if error_count == 3:
             notify(
-                "Le bot a planté 3 fois d'affilée.\n"
-                f"Erreur : {e}\n"
-                "Le site bloque peut-être les requêtes. Vérifie dans les logs GitHub Actions.",
-                title="⚠️ Bot en erreur",
-                priority=3,
+                f"Le bot a plante 3 fois d'affilee.\nErreur : {e}",
+                title="Bot en erreur", priority=3,
             )
         elif error_count % 10 == 0:
             notify(
-                f"Le bot est en erreur depuis {error_count} checks.\n"
-                "Il est probablement bloqué par le site.",
-                title="🔴 Bot bloqué",
-                priority=3,
+                f"Le bot est en erreur depuis {error_count} checks.",
+                title="Bot bloque", priority=3,
             )
         return
 
-    # Remise à zéro du compteur d'erreurs si le check passe
     save_error_count(0)
+    last_count = load_last_state()  # maintenant c'est un nombre
+    print(f"[i] {nb_tickets} billet(s) en revente (precedent: {last_count})")
 
-    new_state = "available" if available else "sold_out"
-    last_state = load_last_state()
-
-    print(f"[i] État actuel: {new_state} (précédent: {last_state})")
-
-    if new_state == "available":
-        # On notifie à chaque check tant que c'est dispo, pour ne rater aucune fenêtre,
-        # mais on peut réduire à "seulement si ça vient de changer" en décommentant la condition
-        # if last_state != "available":
+    if nb_tickets > last_count:
+        new_tickets = nb_tickets - last_count
         notify(
-            f"Billet(s) CAMPING disponible(s) pour la Fête de l'Huma !\n"
-            f"{TICKET_URL}\nFonce, le stock peut repartir vite.",
-            title="🎪 BILLET CAMPING DISPO !",
-            priority=5,
+            f"{new_tickets} nouveau(x) billet(s) CAMPING en revente ! ({nb_tickets} au total)\n"
+            f"{TICKET_PAGE}\nFonce, ca part en secondes.",
+            title=f"BILLET(S) CAMPING DISPO !", priority=5,
         )
-
-    save_state(new_state)
+    save_state(nb_tickets)
 
 
 def run_test() -> None:
-    """Envoie une notification de test sur tous les canaux."""
-    print("[i] Mode test : envoi des notifications...")
+    print("[i] Mode test...")
     notify(
-        "Test réussi ! Le bot de surveillance Fête de l'Huma fonctionne.\n"
-        "Tu recevras un message ici dès qu'un billet camping apparaît en revente.",
-        title="✅ Test réussi",
-        priority=5,
+        "Test reussi ! Le bot fonctionne.\n"
+        "Tu recevras un message ici des qu'un billet camping apparait.",
+        title="Test reussi", priority=5,
     )
-    print("[i] Vérifie Discord ET ntfy !")
+    print("[i] Verifie Discord ET ntfy !")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--loop", action="store_true", help="Tourne en continu")
-    parser.add_argument("--interval", type=int, default=300, help="Intervalle en secondes (mode --loop)")
-    parser.add_argument("--test", action="store_true", help="Envoie une notif de test et quitte")
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--interval", type=int, default=30)
+    parser.add_argument("--test", action="store_true")
     args = parser.parse_args()
 
     if args.test:
         run_test()
     elif args.loop:
-        print(f"Surveillance en continu, toutes les {args.interval}s. Ctrl+C pour arrêter.")
+        print(f"Surveillance toutes les {args.interval}s. Ctrl+C pour arreter.")
         while True:
             run_once()
             time.sleep(args.interval)
