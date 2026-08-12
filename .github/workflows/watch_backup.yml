@@ -3,7 +3,12 @@ name: Watch Huma (backup Playwright)
 on:
   repository_dispatch:
     types: [check-tickets-backup]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Envoyer une notification de test ?"
+        type: boolean
+        default: false
 
 jobs:
   check:
@@ -30,7 +35,7 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-        run: python watch_tickets_backup.py
+        run: python watch_tickets_backup.py ${{ github.event.inputs.test == 'true' && '--test' || '' }}
 
       - name: Save state
         uses: actions/cache@v5
