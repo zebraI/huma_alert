@@ -43,6 +43,17 @@ def notify(message, title="Huma Backup Bot", priority=5):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test", action="store_true")
+    args = parser.parse_args()
+
+    if args.test:
+        print("[BACKUP] Mode test...")
+        notify("Test backup reussi ! Le bot Playwright fonctionne.", title="Test backup reussi", priority=5)
+        print("[BACKUP] Verifie Discord ET ntfy !")
+        return
+
     last_state = "unknown"
     if os.path.exists(STATE_FILE):
         last_state = open(STATE_FILE).read().strip()
