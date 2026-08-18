@@ -36,7 +36,12 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-        run: python watch_tickets.py ${{ github.event.inputs.test == 'true' && '--test' || '' }}
+        run: |
+          if [ "${{ github.event.inputs.test }}" = "true" ]; then
+            python watch_tickets.py --test
+          else
+            timeout 285 python watch_tickets.py --loop --interval 15 || true
+          fi
 
       - name: Save state
         uses: actions/cache@v5
