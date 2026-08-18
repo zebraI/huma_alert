@@ -125,28 +125,37 @@ def run_once() -> None:
         save_error_count(error_count)
         print(f"[!] Erreur ({error_count} consecutives): {e}")
         if error_count == 3:
-            notify(
-                f"Le bot a plante 3 fois d'affilee.\nErreur : {e}",
-                title="Bot en erreur", priority=3,
-            )
+            try:
+                notify(
+                    f"Le bot a plante 3 fois d'affilee.\nErreur : {e}",
+                    title="Bot en erreur", priority=3,
+                )
+            except Exception:
+                print("[!] Impossible d'envoyer la notif d'erreur")
         elif error_count % 10 == 0:
-            notify(
-                f"Le bot est en erreur depuis {error_count} checks.",
-                title="Bot bloque", priority=3,
-            )
+            try:
+                notify(
+                    f"Le bot est en erreur depuis {error_count} checks.",
+                    title="Bot bloque", priority=3,
+                )
+            except Exception:
+                print("[!] Impossible d'envoyer la notif d'erreur")
         return
 
     save_error_count(0)
-    last_count = load_last_state()  # maintenant c'est un nombre
+    last_count = load_last_state()
     print(f"[i] {nb_tickets} billet(s) en revente (precedent: {last_count})")
 
     if nb_tickets > last_count:
         new_tickets = nb_tickets - last_count
-        notify(
-            f"{new_tickets} nouveau(x) billet(s) CAMPING en revente ! ({nb_tickets} au total)\n"
-            f"{TICKET_PAGE}\nFonce, ca part en secondes.",
-            title=f"BILLET(S) CAMPING DISPO !", priority=5,
-        )
+        try:
+            notify(
+                f"{new_tickets} nouveau(x) billet(s) CAMPING en revente ! ({nb_tickets} au total)\n"
+                f"{TICKET_PAGE}\nFonce, ca part en secondes.",
+                title=f"BILLET(S) CAMPING DISPO !", priority=5,
+            )
+        except Exception as e:
+            print(f"[!] Erreur envoi notification: {e}")
     save_state(nb_tickets)
 
 
