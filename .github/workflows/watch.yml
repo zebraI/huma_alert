@@ -38,10 +38,9 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           if [ "${{ github.event.inputs.test }}" = "true" ]; then
-            python watch_tickets.py --test
-          else
-            timeout 285 python -u watch_tickets.py --loop --interval 15 || true
+            python -u watch_tickets.py --test
           fi
+          timeout 285 python -u watch_tickets.py --loop --interval 15 || true
 
       - name: Save state
         uses: actions/cache@v5
