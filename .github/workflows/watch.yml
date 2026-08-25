@@ -40,7 +40,7 @@ jobs:
           if [ "${{ github.event.inputs.test }}" = "true" ]; then
             python -u watch_tickets.py --test
           fi
-          timeout 285 python -u watch_tickets.py --loop --interval 10 || true
+          timeout 285 python -u watch_tickets.py --loop --interval 5 || true
 
       - name: Save state
         uses: actions/cache@v5
