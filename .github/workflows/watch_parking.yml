@@ -1,0 +1,50 @@
+name: Watch Huma parking tickets
+
+on:
+  repository_dispatch:
+    types: [check-tickets-parking]
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Envoyer une notification de test ?"
+        type: boolean
+        default: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Restore last state
+        uses: actions/cache@v5
+        with:
+          path: |
+            last_state_parking.json
+            error_count_parking.txt
+          key: huma-parking-${{ github.run_id }}
+          restore-keys: huma-parking-
+
+      - name: Check parking tickets
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          if [ "${{ github.event.inputs.test }}" = "true" ]; then
+            python -u watch_tickets_parking.py --test
+          fi
+          timeout 285 python -u watch_tickets_parking.py --loop --interval 15 || true
+
+      - name: Save state
+        uses: actions/cache@v5
+        with:
+          path: |
+            last_state_parking.json
+            error_count_parking.txt
+          key: huma-parking-${{ github.run_id }}
